@@ -26,17 +26,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <noftypes.h>
-#include <nofrendo.h>
-#include <event.h>
-#include <nofconfig.h>
-#include <log.h>
-#include <osd.h>
-#include <gui.h>
-#include <vid_drv.h>
+#include "noftypes.h"
+#include "nofrendo.h"
+#include "event.h"
+#include "nofconfig.h"
+#include "log.h"
+#include "osd.h"
+#include "gui.h"
+#include "vid_drv.h"
 
 /* emulated system includes */
-#include <nes.h>
+#include "nes/nes.h"
 
 /* our global machine structure */
 static struct
@@ -235,7 +235,7 @@ int main_loop(const char *filename, system_t type)
       return -1;
 
    osd_getvideoinfo(&video);
-   if (vid_init(video.default_width, video.default_height, video.driver))
+   if (nofrendo_vid_init(video.default_width, video.default_height, video.driver))
       return -1;
 
    console.nextfilename = strdup(filename);

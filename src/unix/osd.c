@@ -20,13 +20,13 @@
 #include <sys/types.h>
 #include <unistd.h>
        
-#include <noftypes.h>
-#include <nofconfig.h>
-#include <log.h>
-#include <osd.h>
-#include <nofrendo.h>
+#include "../noftypes.h"
+#include "../nofconfig.h"
+#include "../log.h"
+#include "../osd.h"
+#include "../nofrendo.h"
 
-#include <version.h>
+#include "../version.h"
 
 /* path must be a valid path, and therefore no longer than PATH_MAX */
 static void addSlash(char *path)

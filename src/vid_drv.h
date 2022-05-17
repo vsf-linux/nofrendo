@@ -26,7 +26,7 @@
 #ifndef _VID_DRV_H_
 #define _VID_DRV_H_
 
-#include <bitmap.h>
+#include "bitmap.h"
 
 typedef struct viddriver_s
 {
@@ -56,7 +56,7 @@ typedef struct viddriver_s
 /* TODO: filth */
 extern bitmap_t *vid_getbuffer(void);
 
-extern int  vid_init(int width, int height, viddriver_t *osd_driver);
+extern int  nofrendo_vid_init(int width, int height, viddriver_t *osd_driver);
 extern void vid_shutdown(void);
 
 extern int  vid_setmode(int width, int height);

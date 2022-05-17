@@ -24,12 +24,12 @@
 */
 
 #include <string.h>
-#include <noftypes.h>
-#include <log.h>
-#include <bitmap.h>
-#include <vid_drv.h>
-#include <gui.h>
-#include <osd.h>
+#include "noftypes.h"
+#include "log.h"
+#include "bitmap.h"
+#include "vid_drv.h"
+#include "gui.h"
+#include "osd.h"
 
 /* hardware surface */
 static bitmap_t *screen = NULL;
@@ -419,7 +419,7 @@ static int vid_findmode(int width, int height, viddriver_t *osd_driver)
 }
 
 /* This is the interface to the drivers, used in nofrendo.c */
-int vid_init(int width, int height, viddriver_t *osd_driver)
+int nofrendo_vid_init(int width, int height, viddriver_t *osd_driver)
 {
    if (vid_findmode(width, height, osd_driver))
    {

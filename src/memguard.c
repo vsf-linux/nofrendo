@@ -25,8 +25,8 @@
 ** $Id: memguard.c,v 1.2 2001/04/27 14:37:11 neil Exp $
 */
 
-#include <noftypes.h>
-#include <memguard.h>
+#include "noftypes.h"
+#include "memguard.h"
 
 /* undefine macro definitions, so we get real calls */
 #undef malloc
@@ -35,7 +35,7 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <log.h>
+#include "log.h"
 
 
 /* Maximum number of allocated blocks at any one time */
@@ -76,7 +76,8 @@ static int mem_checkguardblock(void *data, int guard_size)
    block = ((char *) data) - guard_size;
 
    /* get the size */
-   alloc_size = *((uint32 *) block)++;
+   alloc_size = *(uint32 *)block;
+   block += sizeof(uint32);
 
    /* check leading guard string */
    check = GUARD_STRING;
@@ -141,7 +142,8 @@ static void *mem_guardalloc(int alloc_size, int guard_size)
       *ptr++ = 0xDEADBEEF;
    
    /* store the size of the newly allocated block*/
-   *((uint32 *) block)++ = alloc_size;
+   *(uint32 *)block = alloc_size;
+   block += sizeof(uint32);
 
    /* put guard string at beginning of block */
    check = GUARD_STRING;

@@ -51,19 +51,22 @@ typedef  unsigned short uint16;
 typedef  unsigned int   uint32;
 
 #ifndef __cplusplus
+/*
 typedef enum
 {
    false = 0,
    true = 1
 } bool;
+*/
+#include <stdbool.h>
 
 #ifndef  NULL
 #define  NULL     ((void *) 0)
 #endif
 #endif /* !__cplusplus */
 
-#include <memguard.h>
-#include <log.h>
+#include "memguard.h"
+#include "log.h"
 
 #ifdef NOFRENDO_DEBUG
 

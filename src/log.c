@@ -26,8 +26,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <noftypes.h>
-#include <log.h>
+#include "noftypes.h"
+#include "log.h"
 
 
 static FILE *errorlog = NULL;

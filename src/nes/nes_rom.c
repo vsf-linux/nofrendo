@@ -27,15 +27,15 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <noftypes.h>
-#include <nes_rom.h>
-#include <intro.h>
-#include <nes_mmc.h>
-#include <nes_ppu.h>
-#include <nes.h>
-#include <gui.h>
-#include <log.h>
-#include <osd.h>
+#include "../noftypes.h"
+#include "nes_rom.h"
+#include "../intro.h"
+#include "nes_mmc.h"
+#include "nes_ppu.h"
+#include "nes.h"
+#include "../gui.h"
+#include "../log.h"
+#include "../osd.h"
 
 /* Max length for displayed filename */
 #define  ROM_DISP_MAXLEN   20
@@ -418,7 +418,7 @@ char *rom_getinfo(rominfo_t *rominfo)
 }
 
 /* Load a ROM image into memory */
-rominfo_t *rom_load(const char *filename)
+rominfo_t *nes_rom_load(const char *filename)
 {
    FILE *fp;
    rominfo_t *rominfo;

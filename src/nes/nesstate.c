@@ -25,14 +25,14 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <noftypes.h>
-#include <nesstate.h>
-#include <gui.h>
-#include <nes.h>
-#include <log.h>
-#include <osd.h>
-#include <libsnss.h>
-#include "nes6502.h"
+#include "../noftypes.h"
+#include "nesstate.h"
+#include "../gui.h"
+#include "nes.h"
+#include "../log.h"
+#include "../osd.h"
+#include "../libsnss/libsnss.h"
+#include "../cpu/nes6502.h"
 
 #define  FIRST_STATE_SLOT  0
 #define  LAST_STATE_SLOT   9
@@ -40,7 +40,7 @@
 static int state_slot = FIRST_STATE_SLOT;
 
 /* Set the state-save slot to use (0 - 9) */
-void state_setslot(int slot)
+void nes_state_setslot(int slot)
 {
    /* Don't send a message if we're already at that slot */
    if (state_slot != slot && slot >= FIRST_STATE_SLOT
@@ -337,7 +337,7 @@ static void load_mapperblock(nes_t *state, SNSS_FILE *snssFile)
 }
 
 
-int state_save(void)
+int nes_state_save(void)
 {
    SNSS_FILE *snssFile;
    SNSS_RETURN_CODE status;
@@ -410,7 +410,7 @@ _error:
    return -1;
 }
 
-int state_load(void)
+int nes_state_load(void)
 {
    SNSS_FILE *snssFile;
    SNSS_RETURN_CODE status;

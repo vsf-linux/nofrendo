@@ -24,17 +24,17 @@
 */
 
 #include <stdlib.h>
-#include <noftypes.h>
-#include <event.h>
-#include <nofrendo.h>
-#include <gui.h>
-#include <osd.h>
+#include "noftypes.h"
+#include "event.h"
+#include "nofrendo.h"
+#include "gui.h"
+#include "osd.h"
 
 /* TODO: put system specific stuff in their own files... */
-#include <nes.h>
-#include <nesinput.h>
-#include <nes_pal.h>
-#include <nesstate.h>
+#include "nes/nes.h"
+#include "nes/nesinput.h"
+#include "nes/nes_pal.h"
+#include "nes/nesstate.h"
 
 /* pointer to our current system's event handler table */
 static event_t *system_events = NULL;
@@ -94,73 +94,73 @@ static void func_event_toggle_frameskip(int code)
 static void func_event_state_save(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_save();
+      nes_state_save();
 }
 
 static void func_event_state_load(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_load();
+      nes_state_load();
 }
 
 static void func_event_state_slot_0(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_setslot(0);
+      nes_state_setslot(0);
 }
 
 static void func_event_state_slot_1(int code)
 {
    if (INP_STATE_MAKE == code) 
-      state_setslot(1);
+      nes_state_setslot(1);
 }
 
 static void func_event_state_slot_2(int code)
 {
    if (INP_STATE_MAKE == code) 
-      state_setslot(2);
+      nes_state_setslot(2);
 }
 
 static void func_event_state_slot_3(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_setslot(3);
+      nes_state_setslot(3);
 }
 
 static void func_event_state_slot_4(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_setslot(4);
+      nes_state_setslot(4);
 }
 
 static void func_event_state_slot_5(int code)
 {
    if (INP_STATE_MAKE == code) 
-      state_setslot(5);
+      nes_state_setslot(5);
 }
 
 static void func_event_state_slot_6(int code)
 {
    if (INP_STATE_MAKE == code) 
-      state_setslot(6);
+      nes_state_setslot(6);
 }
 
 static void func_event_state_slot_7(int code)
 {
    if (INP_STATE_MAKE == code) 
-      state_setslot(7);
+      nes_state_setslot(7);
 }
 
 static void func_event_state_slot_8(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_setslot(8);
+      nes_state_setslot(8);
 }
 
 static void func_event_state_slot_9(int code)
 {
    if (INP_STATE_MAKE == code)
-      state_setslot(9);
+      nes_state_setslot(9);
 }
 
 static void func_event_gui_toggle_oam(int code)

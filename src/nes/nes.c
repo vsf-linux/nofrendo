@@ -26,18 +26,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <noftypes.h>
-#include "nes6502.h"
-#include <log.h>
-#include <osd.h>
-#include <gui.h>
-#include <nes.h>
-#include <nes_apu.h>
-#include <nes_ppu.h>
-#include <nes_rom.h>
-#include <nes_mmc.h>
-#include <vid_drv.h>
-#include <nofrendo.h>
+#include "../noftypes.h"
+#include "../cpu/nes6502.h"
+#include "../log.h"
+#include "../osd.h"
+#include "../gui.h"
+#include "nes.h"
+#include "../sndhrdw/nes_apu.h"
+#include "nes_ppu.h"
+#include "nes_rom.h"
+#include "nes_mmc.h"
+#include "../vid_drv.h"
+#include "../nofrendo.h"
 
 
 #define  NES_CLOCK_DIVIDER    12
@@ -376,6 +376,9 @@ void nes_emulate(void)
          frames_to_render += tick_diff;
          gui_tick(tick_diff);
          last_ticks = nofrendo_ticks;
+      } else {
+          // added to avoid this thread takes all the CPU even if nothing to do now
+          osd_delayms(10);
       }
 
       if (true == nes.pause)
@@ -466,7 +469,7 @@ int nes_insertcart(const char *filename, nes_t *machine)
    nes6502_setcontext(machine->cpu);
 
    /* rom file */
-   machine->rominfo = rom_load(filename);
+   machine->rominfo = nes_rom_load(filename);
    if (NULL == machine->rominfo)
       goto _fail;
 

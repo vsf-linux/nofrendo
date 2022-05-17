@@ -24,7 +24,7 @@
 **
 */
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <math.h>
 #include <string.h>
 #include "../noftypes.h"
@@ -53,7 +53,7 @@ static void (*timer_callback)(void) = NULL;
 static int tick_ideal = 0;
 static int tick_interval = 0;
 
-Uint32 mySDLTimer(Uint32 i)
+Uint32 mySDLTimer(Uint32 i, void *param)
 {
    static int tickDiff = 0;
    Uint32 tickLast;
@@ -88,6 +88,11 @@ static int round2int(double value)
       return upper;
 }
 
+void osd_delayms(unsigned ms)
+{
+    SDL_Delay(ms);
+}
+
 int osd_installtimer(int frequency, void *func, int funcsize, void *counter, int countersize)
 {
    double ideal = 1000 / frequency;
@@ -100,7 +105,7 @@ int osd_installtimer(int frequency, void *func, int funcsize, void *counter, int
    tick_ideal = round2int(ideal);
    tick_interval = round2int(ideal / 10) * 10;
 
-   SDL_SetTimer(tick_interval, mySDLTimer);
+   SDL_AddTimer(tick_interval, mySDLTimer, NULL);
 
    timer_callback = func;
 
@@ -243,34 +248,11 @@ void osd_getvideoinfo(vidinfo_t *info)
 }
 
 /* Now that the driver declaration is out of the way, on to the SDL stuff */
+static SDL_Window *myWindow = NULL;
+static SDL_Renderer *myRenderer = NULL;
 static SDL_Surface *mySurface = NULL;
-static SDL_Color myPalette[256];
+static SDL_Palette *myPalette = NULL;
 static bitmap_t *myBitmap = NULL;
-static bool fullscreen = false;
-
-/* flip between full screen and windowed */
-void osd_togglefullscreen(int code)
-{
-   bool pause;
-   nes_t *nes = nes_getcontextptr();
-
-   if (INP_STATE_MAKE != code)
-      return;
-
-   ASSERT(nes);
-
-   pause = nes->pause;
-   nes->pause = true;
-
-   fullscreen ^= true;
-
-   if (set_mode(mySurface->w, mySurface->h))
-      ASSERT(0);
-
-   sdlDriver.invalidate = true;
-
-   nes->pause = pause;
-}
 
 /* initialise SDL video */
 static int init(int width, int height)
@@ -281,6 +263,18 @@ static int init(int width, int height)
 /* squash memory leaks */
 static void shutdown(void)
 {
+   if (NULL != myWindow)
+   {
+      SDL_DestroyWindow(myWindow);
+      myWindow = NULL;
+   }
+
+   if (NULL != myPalette)
+   {
+      SDL_FreePalette(myPalette);
+      myPalette = NULL;
+   }
+
    if (NULL != mySurface)
    {
       SDL_FreeSurface(mySurface);
@@ -304,19 +298,9 @@ static int set_mode(int width, int height)
       restorePalette = true;
    }
 
-   if (fullscreen)
-   {
-      flags = SDL_HWSURFACE | SDL_HWPALETTE | SDL_FULLSCREEN;
-      mySurface = SDL_SetVideoMode(width, height, 8, flags);
-      if (NULL == mySurface)
-         log_printf("Fullscreeen failed: %s\n", SDL_GetError());
-   }
-
    if (NULL == mySurface)
    {
-      fullscreen = false;
-      flags = SDL_HWSURFACE | SDL_HWPALETTE;
-      mySurface = SDL_SetVideoMode(width, height, 8, flags);
+      mySurface = SDL_CreateRGBSurface(0, width, height, 8, 0, 0, 0, 0);
    }
 
    if (NULL == mySurface)
@@ -327,7 +311,7 @@ static int set_mode(int width, int height)
 
    if (restorePalette)
    {
-      SDL_SetColors(mySurface, myPalette, 0, 256);
+      SDL_SetSurfacePalette(mySurface, myPalette);
    }
 
    SDL_ShowCursor(0);
@@ -341,12 +325,12 @@ static void set_palette(rgb_t *pal)
 
    for (i = 0; i < 256; i++)
    {
-      myPalette[i].r = pal[i].r;
-      myPalette[i].g = pal[i].g;
-      myPalette[i].b = pal[i].b;
+      myPalette->colors[i].r = pal[i].r;
+      myPalette->colors[i].g = pal[i].g;
+      myPalette->colors[i].b = pal[i].b;
    }
 
-   SDL_SetColors(mySurface, myPalette, 0, 256);
+   SDL_SetSurfacePalette(mySurface, myPalette);
 }
 
 /* clear all frames to a particular color */
@@ -367,12 +351,14 @@ static bitmap_t *lock_write(void)
 /* release the resource */
 static void free_write(int num_dirties, rect_t *dirty_rects)
 {
+   SDL_Texture *texture;
    bmp_destroy(&myBitmap);
    SDL_UnlockSurface(mySurface);
 
+   texture = SDL_CreateTextureFromSurface(myRenderer, mySurface);
    if (-1 == num_dirties)
    {
-      SDL_UpdateRect(mySurface, 0, 0, 0, 0);
+      SDL_RenderCopy(myRenderer, texture, NULL, NULL);
    }
    else if (num_dirties > 0)
    {
@@ -390,9 +376,19 @@ static void free_write(int num_dirties, rect_t *dirty_rects)
             dirty_rects[i].y += y_offset;
          }
       }
-         
-      SDL_UpdateRects(mySurface, num_dirties, (SDL_Rect *) dirty_rects);
+
+      SDL_Rect rect;
+      for (int i = 0; i < num_dirties; i++)
+      {
+         rect.x = dirty_rects[i].x;
+         rect.y = dirty_rects[i].y;
+         rect.w = dirty_rects[i].w;
+         rect.h = dirty_rects[i].h;
+         SDL_RenderCopy(myRenderer, texture, &rect, &rect);
+      };
    }
+   SDL_DestroyTexture(texture);
+   SDL_RenderPresent(myRenderer);
 }
 
 /*
@@ -409,7 +405,7 @@ typedef struct joystick_s
 static joystick_t **joystick_array = 0;
 static int joystick_count = 0;
 
-static int key_array[SDLK_LAST];
+static int key_array[SDL_NUM_SCANCODES];
 #define LOAD_KEY(key, def_key) \
 key_array[key] = config.read_int("sdlkeys", #key, def_key)
 
@@ -476,131 +472,109 @@ static void osd_initinput()
 
    /* keyboard */
 
-   LOAD_KEY(SDLK_ESCAPE, event_quit);
+   LOAD_KEY(SDL_SCANCODE_ESCAPE, event_quit);
    
-   LOAD_KEY(SDLK_F1, event_soft_reset);
-   LOAD_KEY(SDLK_F2, event_hard_reset);
-   LOAD_KEY(SDLK_F3, event_gui_toggle_fps);
-   LOAD_KEY(SDLK_F4, event_snapshot);
-   LOAD_KEY(SDLK_F5, event_state_save);
-   LOAD_KEY(SDLK_F6, event_toggle_sprites);
-   LOAD_KEY(SDLK_F7, event_state_load);
-   LOAD_KEY(SDLK_F8, event_none);
-   LOAD_KEY(SDLK_F9, event_none);
-   LOAD_KEY(SDLK_F10, event_osd_1);
-   LOAD_KEY(SDLK_F11, event_none);
-   LOAD_KEY(SDLK_F12, event_none);
+   LOAD_KEY(SDL_SCANCODE_F1, event_soft_reset);
+   LOAD_KEY(SDL_SCANCODE_F2, event_hard_reset);
+   LOAD_KEY(SDL_SCANCODE_F3, event_gui_toggle_fps);
+   LOAD_KEY(SDL_SCANCODE_F4, event_snapshot);
+   LOAD_KEY(SDL_SCANCODE_F5, event_state_save);
+   LOAD_KEY(SDL_SCANCODE_F6, event_toggle_sprites);
+   LOAD_KEY(SDL_SCANCODE_F7, event_state_load);
+   LOAD_KEY(SDL_SCANCODE_F8, event_none);
+   LOAD_KEY(SDL_SCANCODE_F9, event_none);
+   LOAD_KEY(SDL_SCANCODE_F10, event_osd_1);
+   LOAD_KEY(SDL_SCANCODE_F11, event_none);
+   LOAD_KEY(SDL_SCANCODE_F12, event_none);
 
-   LOAD_KEY(SDLK_BACKQUOTE, event_none);
+   LOAD_KEY(SDL_SCANCODE_GRAVE, event_none);
 
-   LOAD_KEY(SDLK_1, event_state_slot_1);
-   LOAD_KEY(SDLK_EXCLAIM, event_state_slot_1);
-   LOAD_KEY(SDLK_2, event_state_slot_2);
-   LOAD_KEY(SDLK_AT, event_state_slot_2);
-   LOAD_KEY(SDLK_3, event_state_slot_3);
-   LOAD_KEY(SDLK_HASH, event_state_slot_3);
-   LOAD_KEY(SDLK_4, event_state_slot_4);
-   LOAD_KEY(SDLK_DOLLAR, event_state_slot_4);
-   LOAD_KEY(SDLK_5, event_state_slot_5);
-/*   LOAD_KEY(SDLK_PERCENT, event_state_slot_5);*/
-   LOAD_KEY(SDLK_6, event_state_slot_6);
-   LOAD_KEY(SDLK_CARET, event_state_slot_6);
-   LOAD_KEY(SDLK_7, event_state_slot_7);
-   LOAD_KEY(SDLK_AMPERSAND, event_state_slot_7);
-   LOAD_KEY(SDLK_8, event_state_slot_8);
-   LOAD_KEY(SDLK_ASTERISK, event_state_slot_8);
-   LOAD_KEY(SDLK_9, event_state_slot_9);
-   LOAD_KEY(SDLK_LEFTPAREN, event_state_slot_9);
-   LOAD_KEY(SDLK_0, event_state_slot_0);
-   LOAD_KEY(SDLK_RIGHTPAREN, event_state_slot_0);
+   LOAD_KEY(SDL_SCANCODE_1, event_state_slot_1);
+   LOAD_KEY(SDL_SCANCODE_2, event_state_slot_2);
+   LOAD_KEY(SDL_SCANCODE_3, event_state_slot_3);
+   LOAD_KEY(SDL_SCANCODE_4, event_state_slot_4);
+   LOAD_KEY(SDL_SCANCODE_5, event_state_slot_5);
+   LOAD_KEY(SDL_SCANCODE_6, event_state_slot_6);
+   LOAD_KEY(SDL_SCANCODE_7, event_state_slot_7);
+   LOAD_KEY(SDL_SCANCODE_8, event_state_slot_8);
+   LOAD_KEY(SDL_SCANCODE_9, event_state_slot_9);
+   LOAD_KEY(SDL_SCANCODE_0, event_state_slot_0);
    
-   LOAD_KEY(SDLK_MINUS, event_gui_pattern_color_down);
-   LOAD_KEY(SDLK_UNDERSCORE, event_gui_pattern_color_down);
-   LOAD_KEY(SDLK_EQUALS, event_gui_pattern_color_up);
-   LOAD_KEY(SDLK_PLUS, event_gui_pattern_color_up);
+   LOAD_KEY(SDL_SCANCODE_MINUS, event_gui_pattern_color_down);
+   LOAD_KEY(SDL_SCANCODE_EQUALS, event_gui_pattern_color_up);
 
-   LOAD_KEY(SDLK_BACKSPACE, event_gui_display_info);
+   LOAD_KEY(SDL_SCANCODE_BACKSPACE, event_gui_display_info);
 
-   LOAD_KEY(SDLK_TAB, event_joypad1_select);
+   LOAD_KEY(SDL_SCANCODE_TAB, event_joypad1_select);
 
-   LOAD_KEY(SDLK_q, event_toggle_channel_0);
-   LOAD_KEY(SDLK_w, event_toggle_channel_1);
-   LOAD_KEY(SDLK_e, event_toggle_channel_2);
-   LOAD_KEY(SDLK_r, event_toggle_channel_3);
-   LOAD_KEY(SDLK_t, event_toggle_channel_4);
-   LOAD_KEY(SDLK_y, event_toggle_channel_5);
-   LOAD_KEY(SDLK_u, event_palette_hue_down);
-   LOAD_KEY(SDLK_i, event_palette_hue_up);
-   LOAD_KEY(SDLK_o, event_gui_toggle_oam);
-   LOAD_KEY(SDLK_p, event_gui_toggle_pattern);
+   LOAD_KEY(SDL_SCANCODE_Q, event_toggle_channel_0);
+   LOAD_KEY(SDL_SCANCODE_W, event_toggle_channel_1);
+   LOAD_KEY(SDL_SCANCODE_E, event_toggle_channel_2);
+   LOAD_KEY(SDL_SCANCODE_R, event_toggle_channel_3);
+   LOAD_KEY(SDL_SCANCODE_T, event_toggle_channel_4);
+   LOAD_KEY(SDL_SCANCODE_Y, event_toggle_channel_5);
+   LOAD_KEY(SDL_SCANCODE_U, event_palette_hue_down);
+   LOAD_KEY(SDL_SCANCODE_I, event_palette_hue_up);
+   LOAD_KEY(SDL_SCANCODE_O, event_gui_toggle_oam);
+   LOAD_KEY(SDL_SCANCODE_P, event_gui_toggle_pattern);
 
-/*   LOAD_KEY(SDLK_LEFTBRACE, event_none);
-   LOAD_KEY(SDLK_RIGHTBRACE, event_none);*/
-   LOAD_KEY(SDLK_LEFTBRACKET, event_none);
-   LOAD_KEY(SDLK_RIGHTBRACKET, event_none);
-   LOAD_KEY(SDLK_BACKSLASH, event_toggle_frameskip);
-/*   LOAD_KEY(SDLK_Bar, event_toggle_frameskip);*/
+   LOAD_KEY(SDL_SCANCODE_LEFTBRACKET, event_none);
+   LOAD_KEY(SDL_SCANCODE_RIGHTBRACKET, event_none);
+   LOAD_KEY(SDL_SCANCODE_BACKSLASH, event_toggle_frameskip);
 
-   LOAD_KEY(SDLK_a, event_gui_toggle_wave);
-   LOAD_KEY(SDLK_s, event_set_filter_0);
-   LOAD_KEY(SDLK_d, event_set_filter_1);
-   LOAD_KEY(SDLK_f, event_set_filter_2);
-   LOAD_KEY(SDLK_g, event_none);
-   LOAD_KEY(SDLK_h, event_none);
-   LOAD_KEY(SDLK_j, event_palette_tint_down);
-   LOAD_KEY(SDLK_k, event_palette_tint_up);
-   LOAD_KEY(SDLK_l, event_palette_set_shady);
-   LOAD_KEY(SDLK_COLON, event_palette_set_default);
-   LOAD_KEY(SDLK_SEMICOLON, event_palette_set_default);
-   LOAD_KEY(SDLK_QUOTEDBL, event_none);
-   LOAD_KEY(SDLK_RETURN, event_joypad1_start);
-   LOAD_KEY(SDLK_PAUSE, event_togglepause);
+   LOAD_KEY(SDL_SCANCODE_A, event_gui_toggle_wave);
+   LOAD_KEY(SDL_SCANCODE_S, event_set_filter_0);
+   LOAD_KEY(SDL_SCANCODE_D, event_set_filter_1);
+   LOAD_KEY(SDL_SCANCODE_F, event_set_filter_2);
+   LOAD_KEY(SDL_SCANCODE_G, event_none);
+   LOAD_KEY(SDL_SCANCODE_H, event_none);
+   LOAD_KEY(SDL_SCANCODE_J, event_palette_tint_down);
+   LOAD_KEY(SDL_SCANCODE_K, event_palette_tint_up);
+   LOAD_KEY(SDL_SCANCODE_L, event_palette_set_shady);
+   LOAD_KEY(SDL_SCANCODE_SEMICOLON, event_palette_set_default);
+   LOAD_KEY(SDL_SCANCODE_RETURN, event_joypad1_start);
+   LOAD_KEY(SDL_SCANCODE_PAUSE, event_togglepause);
 
-   LOAD_KEY(SDLK_z, event_joypad1_b);
-   LOAD_KEY(SDLK_x, event_joypad1_a);
-   LOAD_KEY(SDLK_c, event_joypad1_select);
-   LOAD_KEY(SDLK_v, event_joypad1_start);
-   LOAD_KEY(SDLK_b, event_joypad2_b);
-   LOAD_KEY(SDLK_n, event_joypad2_a);
-   LOAD_KEY(SDLK_m, event_joypad2_select);
-   LOAD_KEY(SDLK_COMMA, event_joypad2_start);
-   LOAD_KEY(SDLK_LESS, event_none);
-   LOAD_KEY(SDLK_PERIOD, event_none);
-   LOAD_KEY(SDLK_GREATER, event_none);
-   LOAD_KEY(SDLK_QUESTION, event_none);
-   LOAD_KEY(SDLK_SLASH, event_none);
+   LOAD_KEY(SDL_SCANCODE_Z, event_joypad1_b);
+   LOAD_KEY(SDL_SCANCODE_X, event_joypad1_a);
+   LOAD_KEY(SDL_SCANCODE_C, event_joypad1_select);
+   LOAD_KEY(SDL_SCANCODE_V, event_joypad1_start);
+   LOAD_KEY(SDL_SCANCODE_B, event_joypad2_b);
+   LOAD_KEY(SDL_SCANCODE_N, event_joypad2_a);
+   LOAD_KEY(SDL_SCANCODE_M, event_joypad2_select);
+   LOAD_KEY(SDL_SCANCODE_COMMA, event_joypad2_start);
+   LOAD_KEY(SDL_SCANCODE_PERIOD, event_none);
+   LOAD_KEY(SDL_SCANCODE_SLASH, event_none);
 
-   LOAD_KEY(SDLK_SPACE, event_gui_toggle);
+   LOAD_KEY(SDL_SCANCODE_SPACE, event_gui_toggle);
 
-   LOAD_KEY(SDLK_LCTRL, event_joypad1_b);
-   LOAD_KEY(SDLK_RCTRL, event_joypad1_b);
-   LOAD_KEY(SDLK_LALT, event_joypad1_a);
-   LOAD_KEY(SDLK_RALT, event_joypad1_a);
-   LOAD_KEY(SDLK_LSHIFT, event_joypad1_a);
-   LOAD_KEY(SDLK_RSHIFT, event_joypad1_a);
+   LOAD_KEY(SDL_SCANCODE_LCTRL, event_joypad1_b);
+   LOAD_KEY(SDL_SCANCODE_RCTRL, event_joypad1_b);
+   LOAD_KEY(SDL_SCANCODE_LALT, event_joypad1_a);
+   LOAD_KEY(SDL_SCANCODE_RALT, event_joypad1_a);
+   LOAD_KEY(SDL_SCANCODE_LSHIFT, event_joypad1_a);
+   LOAD_KEY(SDL_SCANCODE_RSHIFT, event_joypad1_a);
 
-   LOAD_KEY(SDLK_KP1, event_none);
-   LOAD_KEY(SDLK_KP2, event_joypad1_down);
-   LOAD_KEY(SDLK_KP3, event_none);
-   LOAD_KEY(SDLK_KP4, event_joypad1_left);
-   LOAD_KEY(SDLK_KP5, event_startsong);
-   LOAD_KEY(SDLK_KP6, event_joypad1_right);
-   LOAD_KEY(SDLK_KP7, event_songdown);
-   LOAD_KEY(SDLK_KP8, event_joypad1_up);
-   LOAD_KEY(SDLK_KP9, event_songup);
-   LOAD_KEY(SDLK_UP, event_joypad1_up);
-   LOAD_KEY(SDLK_DOWN, event_joypad1_down);
-   LOAD_KEY(SDLK_LEFT, event_joypad1_left);
-   LOAD_KEY(SDLK_RIGHT, event_joypad1_right);
-   LOAD_KEY(SDLK_HOME, event_none);
-   LOAD_KEY(SDLK_END, event_none);
-   LOAD_KEY(SDLK_PAGEUP, event_none);
-   LOAD_KEY(SDLK_PAGEDOWN, event_none);
-   LOAD_KEY(SDLK_KP_PLUS, event_toggle_frameskip);
+   LOAD_KEY(SDL_SCANCODE_KP_1, event_none);
+   LOAD_KEY(SDL_SCANCODE_KP_2, event_joypad1_down);
+   LOAD_KEY(SDL_SCANCODE_KP_3, event_none);
+   LOAD_KEY(SDL_SCANCODE_KP_4, event_joypad1_left);
+   LOAD_KEY(SDL_SCANCODE_KP_5, event_startsong);
+   LOAD_KEY(SDL_SCANCODE_KP_6, event_joypad1_right);
+   LOAD_KEY(SDL_SCANCODE_KP_7, event_songdown);
+   LOAD_KEY(SDL_SCANCODE_KP_8, event_joypad1_up);
+   LOAD_KEY(SDL_SCANCODE_KP_9, event_songup);
+   LOAD_KEY(SDL_SCANCODE_UP, event_joypad1_up);
+   LOAD_KEY(SDL_SCANCODE_DOWN, event_joypad1_down);
+   LOAD_KEY(SDL_SCANCODE_LEFT, event_joypad1_left);
+   LOAD_KEY(SDL_SCANCODE_RIGHT, event_joypad1_right);
+   LOAD_KEY(SDL_SCANCODE_HOME, event_none);
+   LOAD_KEY(SDL_SCANCODE_END, event_none);
+   LOAD_KEY(SDL_SCANCODE_PAGEUP, event_none);
+   LOAD_KEY(SDL_SCANCODE_PAGEDOWN, event_none);
+   LOAD_KEY(SDL_SCANCODE_KP_PLUS, event_toggle_frameskip);
 
    /* events */
-
-   event_set(event_osd_1, osd_togglefullscreen);
 }
 
 void osd_getinput(void)
@@ -617,7 +591,7 @@ void osd_getinput(void)
       case SDL_KEYUP:
          code = (myEvent.key.state == SDL_PRESSED) ? INP_STATE_MAKE : INP_STATE_BREAK;
 
-         func_event = event_get(key_array[myEvent.key.keysym.sym]);
+         func_event = event_get(key_array[myEvent.key.keysym.scancode]);
          if (func_event)
             func_event(code);
          break;
@@ -704,13 +678,21 @@ int osd_init()
 
    /* Initialize the SDL library */
    if (SDL_Init (SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_VIDEO
-                 | SDL_INIT_JOYSTICK) < 0)
+                 /*| SDL_INIT_JOYSTICK*/) < 0)
    {
       printf("Couldn't initialize SDL: %s\n", SDL_GetError());
       return -1;
    }
 
-   SDL_WM_SetCaption("Nofrendo", 0);
+   myWindow = SDL_CreateWindow("Nofrendo", 0, 0, DEFAULT_WIDTH, DEFAULT_HEIGHT, 0);
+   if (NULL == myWindow)
+       return -1;
+   myPalette = SDL_AllocPalette(256);
+   if (NULL == myPalette)
+       return -1;
+   myRenderer = SDL_CreateRenderer(myWindow, -1, 0);
+   if (NULL == myRenderer)
+       return -1;
 
    if (osd_init_sound())
       return -1;
