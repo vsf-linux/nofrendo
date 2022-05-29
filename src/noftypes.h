@@ -65,7 +65,6 @@ typedef enum
 #endif
 #endif /* !__cplusplus */
 
-#include "memguard.h"
 #include "log.h"
 
 #ifdef NOFRENDO_DEBUG
@@ -75,6 +74,7 @@ typedef enum
 
 #else /* !NOFRENDO_DEBUG */
 
+#include "memguard.h"
 #define  ASSERT(expr)
 #define  ASSERT_MSG(msg)
 
